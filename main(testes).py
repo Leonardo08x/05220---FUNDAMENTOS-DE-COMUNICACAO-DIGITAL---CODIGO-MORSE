@@ -1,22 +1,19 @@
 #!/usr/bin/env python3
-# front_teste_IA.py
 # Interface interativa para codificação/decodificação de Morse via texto ou áudio
 
 import sys
 import os
-import time
-from audio_handler import AudioMorse
-from text_handler import TextMorse
+from utils.audio.audio_handler import AudioMorse
+from utils.text.text_handler import TextMorse
+from frontend.visualizer import MorseVisualizer
 
 def limpar_tela():
-    """Limpa o terminal (funciona no Windows e Unix-like)."""
     os.system('cls' if os.name == 'nt' else 'clear')
 
 def aguardar_enter(mensagem="\nPressione Enter para continuar..."):
     input(mensagem)
 
 def modo_texto():
-    """Submenu para manipulação de texto (Morse)."""
     text_morse = TextMorse()
     while True:
         limpar_tela()
@@ -52,7 +49,6 @@ def modo_texto():
             aguardar_enter()
 
 def emitir_audio():
-    """Gera áudio a partir de texto e reproduz."""
     print("\n--- EMITIR ÁUDIO MORSE ---")
     texto = input("Texto a ser transmitido: ").strip()
     if not texto:
@@ -76,38 +72,29 @@ def emitir_audio():
 
     print("Reproduzindo áudio... Pressione Enter para parar.")
     audio.play()
-    input()               # espera o Enter
+    input()
     audio.stop()
     print("Reprodução interrompida.")
 
 def ouvir_microfone():
-    """Captura áudio do microfone e decodifica para texto."""
     print("\n--- OUVIR (MICROFONE) ---")
     try:
-        dot_dur = float(input("Duração do ponto (segundos) esperada no sinal [padrão 0.1]: ") or 0.1)
-        duracao = float(input("Tempo de gravação (segundos) [padrão 5]: ") or 5)
+        dot_dur = float(input("Duração do ponto (segundos) esperada [padrão 0.1]: ") or 0.1)
     except ValueError:
-        print("Valor inválido. Usando padrões: dot=0.1s, gravação=5s.")
-        dot_dur, duracao = 0.1, 5.0
+        dot_dur = 0.1
 
-    audio = AudioMorse(dot_duration=dot_dur)
-    print(f"\nGravando por {duracao} segundos... Fale ou reproduza o sinal Morse.")
-    try:
-        texto = audio.audio_to_text(source=None, source_type='mic', duration=duracao)
-    except Exception as e:
-        print(f"Erro ao capturar áudio: {e}")
-        aguardar_enter()
-        return
+    viz = MorseVisualizer(show=True)
+    audio = AudioMorse(dot_duration=dot_dur, visualizer=viz)   # valor manual
+    texto = audio.audio_to_text(source=None, source_type='mic')
 
     if texto.strip():
-        print("\n--- Texto decodificado ---")
+        print("\n--- Texto decodificado final ---")
         print(texto)
     else:
-        print("Nenhum sinal Morse detectado ou decodificação falhou.")
+        print("Nenhum sinal Morse detectado.")
     aguardar_enter()
 
 def usar_arquivo():
-    """Decodifica um arquivo WAV existente."""
     print("\n--- USAR ARQUIVO DE ÁUDIO ---")
     caminho = input("Caminho do arquivo WAV: ").strip()
     if not caminho:
@@ -118,10 +105,10 @@ def usar_arquivo():
     try:
         dot_dur = float(input("Duração do ponto (segundos) esperada no sinal [padrão 0.1]: ") or 0.1)
     except ValueError:
-        print("Valor inválido. Usando 0.1s.")
         dot_dur = 0.1
 
-    audio = AudioMorse(dot_duration=dot_dur)
+    viz = MorseVisualizer(show=True)
+    audio = AudioMorse(dot_duration=dot_dur, visualizer=viz)
     try:
         texto = audio.audio_to_text(source=caminho, source_type='file')
     except FileNotFoundError:
@@ -137,11 +124,10 @@ def usar_arquivo():
         print("\n--- Texto decodificado ---")
         print(texto)
     else:
-        print("Não foi possível decodificar o áudio (sinal muito fraco ou padrão não reconhecido).")
+        print("Não foi possível decodificar o áudio.")
     aguardar_enter()
 
 def modo_audio():
-    """Submenu para operações com áudio."""
     while True:
         limpar_tela()
         print("=== MODO ÁUDIO ===")
@@ -163,7 +149,6 @@ def modo_audio():
             aguardar_enter()
 
 def main():
-    """Menu principal."""
     while True:
         limpar_tela()
         print("===== SISTEMA DE CÓDIGO MORSE =====")

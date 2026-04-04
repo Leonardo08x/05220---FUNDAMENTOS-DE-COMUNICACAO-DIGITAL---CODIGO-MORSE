@@ -1,5 +1,5 @@
 # text_handler.py
-from morse_codec import MorseCodec
+from utils.core.morse_codec import MorseCodec
 
 class TextMorse:
     """Interface para entrada/saída de texto (modo texto)."""
