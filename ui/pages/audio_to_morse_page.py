@@ -7,7 +7,7 @@ from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QFont
 
 from utils.audio.audio_handler import AudioMorse
-from frontend.visualizer import MorseVisualizer
+from ui.widgets.visualizer import MorseVisualizer
 from ui.widgets.mpl_canvas import MplCanvas
 
 
