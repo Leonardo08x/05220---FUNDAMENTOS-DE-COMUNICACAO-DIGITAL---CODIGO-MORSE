@@ -7,6 +7,8 @@ from PyQt6.QtGui import QFont
 
 from .pages.text_to_morse_page import TextToMorsePage
 from .pages.audio_to_morse_page import AudioToTextPage
+from .pages.text_to_audio_page import TextToAudioPage
+from .pages.mic_to_text_page import MicToTextPage
 
 
 class PlaceholderPage(QWidget):
@@ -61,12 +63,14 @@ class MainWindow(QMainWindow):
         app_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.btn_audio_to_text = QPushButton("Áudio → Texto")
+        self.btn_mic_to_text = QPushButton("Microfone → Texto")
         self.btn_text_to_audio = QPushButton("Texto → Áudio")
         self.btn_text_to_morse = QPushButton("Texto → Morse")
 
         menu_layout.addWidget(app_title)
         menu_layout.addSpacing(20)
         menu_layout.addWidget(self.btn_audio_to_text)
+        menu_layout.addWidget(self.btn_mic_to_text)
         menu_layout.addWidget(self.btn_text_to_audio)
         menu_layout.addWidget(self.btn_text_to_morse)
         menu_layout.addStretch()
@@ -75,17 +79,20 @@ class MainWindow(QMainWindow):
         self.stack = QStackedWidget()
 
         self.audio_to_text_page = AudioToTextPage()
-        self.text_to_audio_page = PlaceholderPage("Texto → Áudio")
+        self.mic_to_text_page = MicToTextPage()
+        self.text_to_audio_page = TextToAudioPage()
         self.text_to_morse_page = TextToMorsePage()
 
         self.stack.addWidget(self.audio_to_text_page)   # índice 0
-        self.stack.addWidget(self.text_to_audio_page)   # índice 1
-        self.stack.addWidget(self.text_to_morse_page)   # índice 2
+        self.stack.addWidget(self.mic_to_text_page)     # índice 1
+        self.stack.addWidget(self.text_to_audio_page)   # índice 2
+        self.stack.addWidget(self.text_to_morse_page)   # índice 3
 
         # ===== CONEXÕES =====
         self.btn_audio_to_text.clicked.connect(lambda: self.stack.setCurrentIndex(0))
-        self.btn_text_to_audio.clicked.connect(lambda: self.stack.setCurrentIndex(1))
-        self.btn_text_to_morse.clicked.connect(lambda: self.stack.setCurrentIndex(2))
+        self.btn_mic_to_text.clicked.connect(lambda: self.stack.setCurrentIndex(1))
+        self.btn_text_to_audio.clicked.connect(lambda: self.stack.setCurrentIndex(2))
+        self.btn_text_to_morse.clicked.connect(lambda: self.stack.setCurrentIndex(3))
 
         # Página inicial
         self.stack.setCurrentIndex(2)
