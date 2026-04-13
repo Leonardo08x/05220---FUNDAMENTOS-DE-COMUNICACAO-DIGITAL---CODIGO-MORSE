@@ -7,7 +7,6 @@ from scipy.fft import fft
 from scipy.io import wavfile
 from scipy.signal import butter, filtfilt, medfilt
 from utils.core.morse_codec import MorseCodec
-from frontend.visualizer import MorseVisualizer
 
 class AudioMorse:
     """

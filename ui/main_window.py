@@ -6,6 +6,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 
 from .pages.text_to_morse_page import TextToMorsePage
+from .pages.audio_to_morse_page import AudioToTextPage
 
 
 class PlaceholderPage(QWidget):
@@ -73,7 +74,7 @@ class MainWindow(QMainWindow):
         # ===== ÁREA DE PÁGINAS =====
         self.stack = QStackedWidget()
 
-        self.audio_to_text_page = PlaceholderPage("Áudio → Texto")
+        self.audio_to_text_page = AudioToTextPage()
         self.text_to_audio_page = PlaceholderPage("Texto → Áudio")
         self.text_to_morse_page = TextToMorsePage()
 
