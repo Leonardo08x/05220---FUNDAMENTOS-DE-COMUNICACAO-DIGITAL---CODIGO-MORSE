@@ -7,7 +7,7 @@ from scipy.io import wavfile
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QTextEdit, QMessageBox, QDoubleSpinBox
+    QTextEdit, QMessageBox, QDoubleSpinBox, QScrollArea
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QFont
@@ -17,7 +17,7 @@ from ui.widgets.mpl_canvas import MplCanvas
 
 
 class DecodeWorker(QThread):
-    finished_success = pyqtSignal(str, str)
+    finished_success = pyqtSignal(object)
     finished_error = pyqtSignal(str)
 
     def __init__(self, wav_path: str, dot_duration=None, frequency=None):
@@ -35,9 +35,19 @@ class DecodeWorker(QThread):
             )
 
             decoded_text = decoder.audio_to_text(self.wav_path, source_type='file')
-            detected_morse = decoder._morse_str or ""
 
-            self.finished_success.emit(detected_morse, decoded_text)
+            result = {
+                "decoded_text": decoded_text,
+                "morse_str": decoder._morse_str or "",
+                "raw_audio": decoder._raw_audio,
+                "filtered_audio": decoder._filtered_audio,
+                "envelope": decoder._envelope,
+                "state": decoder._state,
+                "sample_rate": decoder.sample_rate,
+                "dot_duration": decoder.dot_duration,
+            }
+
+            self.finished_success.emit(result)
 
         except Exception as e:
             self.finished_error.emit(str(e))
@@ -53,7 +63,6 @@ class MicRecorderWorker(QThread):
         self.sample_rate = sample_rate
         self.is_recording = False
         self.frames = []
-        self.temp_wav_path = None
         self.stream = None
 
     def callback(self, indata, frames, time, status):
@@ -93,8 +102,6 @@ class MicRecorderWorker(QThread):
             os.close(fd)
 
             wavfile.write(path, self.sample_rate, audio)
-            self.temp_wav_path = path
-
             self.finished_success.emit(path, audio)
 
         except Exception as e:
@@ -112,7 +119,7 @@ class MicToTextPage(QWidget):
         self.record_worker = None
         self.decode_worker = None
         self.recorded_wav_path = None
-        self.raw_audio = None
+        self.raw_audio_recorded = None
 
         self._build_ui()
 
@@ -126,7 +133,7 @@ class MicToTextPage(QWidget):
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         subtitle = QLabel(
-            "Grave um áudio em código morse pelo microfone e converta para texto comum."
+            "Grave um áudio em código morse pelo microfone, visualize o processamento e converta para texto."
         )
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
         subtitle.setWordWrap(True)
@@ -179,12 +186,6 @@ class MicToTextPage(QWidget):
         buttons_layout.addWidget(self.decode_button)
         buttons_layout.addWidget(self.clear_button)
 
-        raw_audio_label = QLabel("Áudio bruto gravado:")
-        raw_audio_label.setFont(QFont("Arial", 11, QFont.Weight.Bold))
-
-        self.raw_audio_canvas = MplCanvas(self, width=10, height=4, dpi=100)
-        self.raw_audio_canvas.setMinimumHeight(300)
-
         morse_label = QLabel("Código Morse detectado:")
         morse_label.setFont(QFont("Arial", 11, QFont.Weight.Bold))
 
@@ -199,6 +200,42 @@ class MicToTextPage(QWidget):
         self.text_output.setReadOnly(True)
         self.text_output.setPlaceholderText("O texto convertido aparecerá aqui...")
 
+        # canvases
+        self.raw_canvas = MplCanvas(self, width=10, height=4.5, dpi=100)
+        self.filtered_canvas = MplCanvas(self, width=10, height=4.5, dpi=100)
+        self.energy_canvas = MplCanvas(self, width=10, height=4.5, dpi=100)
+        self.state_canvas = MplCanvas(self, width=10, height=4.0, dpi=100)
+        self.symbols_canvas = MplCanvas(self, width=10, height=2.5, dpi=100)
+
+        self.raw_canvas.setMinimumHeight(320)
+        self.filtered_canvas.setMinimumHeight(320)
+        self.energy_canvas.setMinimumHeight(320)
+        self.state_canvas.setMinimumHeight(280)
+        self.symbols_canvas.setMinimumHeight(180)
+
+        graphs_container = QWidget()
+        graphs_layout = QVBoxLayout(graphs_container)
+        graphs_layout.setSpacing(10)
+
+        graphs_layout.addWidget(QLabel("1. Áudio bruto"))
+        graphs_layout.addWidget(self.raw_canvas)
+
+        graphs_layout.addWidget(QLabel("2. Áudio filtrado"))
+        graphs_layout.addWidget(self.filtered_canvas)
+
+        graphs_layout.addWidget(QLabel("3. Envelope e limiar"))
+        graphs_layout.addWidget(self.energy_canvas)
+
+        graphs_layout.addWidget(QLabel("4. Sequência de estados"))
+        graphs_layout.addWidget(self.state_canvas)
+
+        graphs_layout.addWidget(QLabel("5. Símbolos morse detectados"))
+        graphs_layout.addWidget(self.symbols_canvas)
+
+        graphs_scroll = QScrollArea()
+        graphs_scroll.setWidgetResizable(True)
+        graphs_scroll.setWidget(graphs_container)
+
         self.status_label = QLabel("Pronto.")
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignRight)
 
@@ -207,33 +244,12 @@ class MicToTextPage(QWidget):
         main_layout.addWidget(settings_label)
         main_layout.addLayout(config_layout)
         main_layout.addLayout(buttons_layout)
-        main_layout.addWidget(raw_audio_label)
-        main_layout.addWidget(self.raw_audio_canvas)
         main_layout.addWidget(morse_label)
         main_layout.addWidget(self.morse_output)
         main_layout.addWidget(text_label)
         main_layout.addWidget(self.text_output)
+        main_layout.addWidget(graphs_scroll, 1)
         main_layout.addWidget(self.status_label)
-
-    def _plot_raw_audio(self):
-        fig = self.raw_audio_canvas.figure
-        fig.clear()
-        ax = fig.add_subplot(111)
-
-        if self.raw_audio is not None and len(self.raw_audio) > 0:
-            t = np.arange(len(self.raw_audio)) / self.sample_rate
-            ax.plot(t, self.raw_audio)
-            ax.set_xlabel("Tempo (s)")
-            ax.set_ylabel("Amplitude")
-            ax.set_title("Áudio Bruto Gravado")
-            ax.grid(True)
-
-        fig.tight_layout()
-        self.raw_audio_canvas.draw()
-
-    def _clear_raw_audio_plot(self):
-        self.raw_audio_canvas.figure.clear()
-        self.raw_audio_canvas.draw()
 
     def start_recording(self):
         if self.record_worker and self.record_worker.isRunning():
@@ -241,10 +257,10 @@ class MicToTextPage(QWidget):
             return
 
         self.recorded_wav_path = None
-        self.raw_audio = None
+        self.raw_audio_recorded = None
         self.morse_output.clear()
         self.text_output.clear()
-        self._clear_raw_audio_plot()
+        self._clear_all_plots()
 
         self.record_worker = MicRecorderWorker(sample_rate=self.sample_rate)
         self.record_worker.status_update.connect(self.on_record_status_update)
@@ -268,14 +284,21 @@ class MicToTextPage(QWidget):
 
     def on_record_success(self, wav_path: str, raw_audio):
         self.recorded_wav_path = wav_path
-        self.raw_audio = raw_audio
+        self.raw_audio_recorded = raw_audio
 
-        self._plot_raw_audio()
-
+        duration = len(raw_audio) / self.sample_rate if raw_audio is not None else 0
         self.start_record_button.setEnabled(True)
         self.stop_record_button.setEnabled(False)
         self.decode_button.setEnabled(True)
-        self.status_label.setText("Gravação concluída com sucesso.")
+        self.status_label.setText(f"Gravação concluída com sucesso. Duração: {duration:.2f}s")
+
+        # já mostra o bruto da gravação, antes mesmo da decodificação
+        self._plot_waveform(
+            canvas=self.raw_canvas,
+            data=self.raw_audio_recorded,
+            title="Áudio Bruto Gravado",
+            sample_rate=self.sample_rate
+        )
 
     def on_record_error(self, error_message: str):
         self.start_record_button.setEnabled(True)
@@ -308,9 +331,50 @@ class MicToTextPage(QWidget):
         self.decode_worker.finished_error.connect(self.on_decode_error)
         self.decode_worker.start()
 
-    def on_decode_success(self, morse: str, text: str):
+    def on_decode_success(self, result: object):
+        morse = result["morse_str"]
+        text = result["decoded_text"]
+        raw_audio = result["raw_audio"]
+        filtered_audio = result["filtered_audio"]
+        envelope = result["envelope"]
+        state = result["state"]
+        sample_rate = result["sample_rate"]
+        dot_duration = result["dot_duration"]
+
         self.morse_output.setPlainText(morse)
         self.text_output.setPlainText(text)
+
+        # gráficos
+        self._plot_waveform(
+            canvas=self.raw_canvas,
+            data=raw_audio,
+            title="1. Áudio Bruto",
+            sample_rate=sample_rate
+        )
+
+        self._plot_waveform(
+            canvas=self.filtered_canvas,
+            data=filtered_audio,
+            title="2. Áudio Filtrado",
+            sample_rate=sample_rate
+        )
+
+        self._plot_energy_and_threshold(
+            envelope=envelope,
+            dot_duration=dot_duration,
+            title="3. Envelope e Limiar"
+        )
+
+        self._plot_state_sequence(
+            state=state,
+            title="4. Sequência de Estados"
+        )
+
+        self._plot_morse_symbols(
+            morse_str=morse,
+            title="5. Símbolos Morse Detectados"
+        )
+
         self.decode_button.setEnabled(True)
         self.start_record_button.setEnabled(True)
         self.status_label.setText("Decodificação concluída.")
@@ -321,6 +385,95 @@ class MicToTextPage(QWidget):
         self.status_label.setText("Erro na decodificação.")
         QMessageBox.critical(self, "Erro", f"Falha ao decodificar a gravação:\n{error_message}")
 
+    def _plot_waveform(self, canvas, data, title, sample_rate):
+        fig = canvas.figure
+        fig.clear()
+        ax = fig.add_subplot(111)
+
+        if data is not None and len(data) > 0:
+            t = np.arange(len(data)) / sample_rate
+            ax.plot(t, data)
+            ax.set_xlabel("Tempo (s)")
+            ax.set_ylabel("Amplitude")
+            ax.set_title(title)
+            ax.grid(True)
+
+        fig.tight_layout()
+        canvas.draw()
+
+    def _plot_energy_and_threshold(self, envelope, dot_duration, title):
+        fig = self.energy_canvas.figure
+        fig.clear()
+        ax = fig.add_subplot(111)
+
+        if envelope is not None and len(envelope) > 0:
+            max_env = np.max(envelope)
+            min_env = np.min(envelope)
+            threshold = min_env + (max_env - min_env) * 0.4
+            threshold = max(threshold, 0.02)
+
+            ax.plot(envelope, label="Envelope")
+            ax.axhline(y=threshold, linestyle="--", label=f"Limiar = {threshold:.4f}")
+
+        ax.set_title(title)
+        ax.set_xlabel("Amostra")
+        ax.set_ylabel("Energia")
+        ax.grid(True)
+        ax.legend()
+
+        fig.tight_layout()
+        self.energy_canvas.draw()
+
+    def _plot_state_sequence(self, state, title):
+        fig = self.state_canvas.figure
+        fig.clear()
+        ax = fig.add_subplot(111)
+
+        if state is not None and len(state) > 0:
+            ax.step(np.arange(len(state)), state, where='mid')
+
+        ax.set_title(title)
+        ax.set_xlabel("Amostra")
+        ax.set_ylabel("Estado")
+        ax.set_ylim(-0.1, 1.1)
+        ax.grid(True)
+
+        fig.tight_layout()
+        self.state_canvas.draw()
+
+    def _plot_morse_symbols(self, morse_str, title):
+        fig = self.symbols_canvas.figure
+        fig.clear()
+        ax = fig.add_subplot(111)
+
+        display_text = morse_str if morse_str else "(nenhum símbolo detectado)"
+        ax.text(
+            0.5,
+            0.5,
+            display_text,
+            ha='center',
+            va='center',
+            fontsize=14,
+            family='monospace',
+            wrap=True
+        )
+        ax.axis('off')
+        ax.set_title(title)
+
+        fig.tight_layout()
+        self.symbols_canvas.draw()
+
+    def _clear_all_plots(self):
+        for canvas in [
+            self.raw_canvas,
+            self.filtered_canvas,
+            self.energy_canvas,
+            self.state_canvas,
+            self.symbols_canvas
+        ]:
+            canvas.figure.clear()
+            canvas.draw()
+
     def clear_fields(self):
         if self.record_worker and self.record_worker.isRunning():
             self.record_worker.stop_recording()
@@ -329,8 +482,8 @@ class MicToTextPage(QWidget):
         self.text_output.clear()
         self.dot_duration_input.setValue(0.0)
         self.frequency_input.setValue(0.0)
-        self.raw_audio = None
-        self._clear_raw_audio_plot()
+        self.raw_audio_recorded = None
+        self._clear_all_plots()
 
         self.start_record_button.setEnabled(True)
         self.stop_record_button.setEnabled(False)
