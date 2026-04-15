@@ -1,4 +1,4 @@
-from dict import word_to_bin_dict
+from utils.core.dict import word_to_bin_dict
 class conversor:
     def __init__(self, word):
         self.word = word
